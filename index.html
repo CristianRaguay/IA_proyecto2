@@ -1,0 +1,234 @@
+<!DOCTYPE HTML>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Machine Learning con tytus.js</title>
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="./dist/tytus.js"></script> <!-- Carga local de tytus.js -->
+</head>
+<body>
+  <div class="container">
+    <h2>Práctica de Machine Learning</h2>
+
+    <!-- Selector de archivo CSV -->
+    <label for="fileInput">Selecciona un archivo CSV:</label>
+    <input type="file" id="fileInput" accept=".csv"><br><br>
+
+    <!-- Selección del objetivo -->
+    <label for="objectiveSelect">Objetivo del Entrenamiento:</label>
+    <select id="objectiveSelect">
+      <option value="pattern">Tendencias</option>
+      <option value="classification">Clasificación</option>
+      <option value="prediction">Predicción</option>
+    </select><br><br>
+
+    <!-- Selección del algoritmo -->
+    <label for="algorithmSelect">Selecciona el Algoritmo:</label>
+    <select id="algorithmSelect">
+      <option value="linear_regression">Regresión Lineal</option>
+      <option value="polynomial_regression">Regresión Polinómica</option>
+      <option value="kmeans">K-Means</option>
+      <option value="knn">K-Nearest Neighbors</option>
+    </select><br><br>
+
+    <!-- Parámetros de Configuración -->
+    <label for="trainSize">Porcentaje de Train (0-100):</label>
+    <input type="number" id="trainSize" value="70" min="0" max="100"><br><br>
+
+    <div id="polynomialConfig" style="display:none;">
+      <label for="polynomialDegree">Grado del Polinomio (para Regresión Polinómica):</label>
+      <input type="number" id="polynomialDegree" value="2" min="1"><br><br>
+    </div>
+
+    <div id="kmeansConfig" style="display:none;">
+      <label for="numClusters">Número de Clusters (para K-Means):</label>
+      <input type="number" id="numClusters" value="3" min="1"><br><br>
+    </div>
+
+    <div id="classificationConfig" style="display:none;">
+      <label for="numClasses">Número de Clases (para Clasificación):</label>
+      <input type="number" id="numClasses" value="2" min="2"><br><br>
+    </div>
+
+    <!-- Selección de Variables de Entrada y Salida -->
+    <label for="inputVars">Variables de Entrada:</label>
+    <input type="text" id="inputVars" placeholder="Columna1,Columna2,..."><br><br>
+    
+    <label for="outputVar">Variable de Salida:</label>
+    <input type="text" id="outputVar" placeholder="Columna de salida"><br><br>
+
+    <!-- Botones de Operación -->
+    <button onclick="trainModel()">Entrenar</button>
+    <button onclick="predict()">Predecir</button>
+
+    <!-- Resultados y Gráficas -->
+    <div id="results"></div>
+    <div id="chart_div" style="width: 900px; height: 500px;"></div>
+  </div>
+
+  <script>
+    let dataset = null;
+    let model = null;
+
+    // Cambia la configuración según el algoritmo seleccionado
+    document.getElementById('algorithmSelect').addEventListener('change', function() {
+      const algorithm = this.value;
+      document.getElementById('polynomialConfig').style.display = algorithm === 'polynomial_regression' ? 'block' : 'none';
+      document.getElementById('kmeansConfig').style.display = algorithm === 'kmeans' ? 'block' : 'none';
+      document.getElementById('classificationConfig').style.display = algorithm === 'knn' ? 'block' : 'none';
+    });
+
+    // Cargar y parsear CSV
+    document.getElementById('fileInput').addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        dataset = parseCSV(e.target.result);
+        document.getElementById("results").innerText = "Archivo cargado correctamente.";
+      };
+      reader.readAsText(file);
+    });
+
+    // Función para entrenar el modelo
+    function trainModel() {
+      const algorithm = document.getElementById('algorithmSelect').value;
+      const trainSize = document.getElementById('trainSize').value / 100;
+
+      if (!dataset) {
+        alert("Por favor, carga un archivo CSV.");
+        return;
+      }
+
+      try {
+        switch (algorithm) {
+          case 'linear_regression':
+            model = new LinearRegression();
+            model.fit(dataset.x, dataset.y);
+            break;
+
+          case 'polynomial_regression':
+            const degree = parseInt(document.getElementById('polynomialDegree').value);
+            model = new PolynomialRegression();
+            model.fit(dataset.x, dataset.y, degree);
+            break;
+
+          case 'kmeans':
+            const numClusters = parseInt(document.getElementById('numClusters').value);
+            model = new KMeans(numClusters);
+            model.fit(dataset.x);
+            break;
+
+          case 'knn':
+            model = new KNearestNeighbor();
+            model.fit(dataset.x, dataset.y);
+            break;
+
+          default:
+            throw new Error("Algoritmo no soportado.");
+        }
+
+        document.getElementById('results').innerText = "Entrenamiento completado.";
+      } catch (error) {
+        console.error("Error al entrenar el modelo:", error);
+        document.getElementById('results').innerText = "Error en el entrenamiento: " + error.message;
+      }
+    }
+
+    // Función para realizar predicciones y visualizar
+    function predict() {
+      if (!model) {
+        alert("Por favor, entrena un modelo antes de predecir.");
+        return;
+      }
+
+      let predictions;
+      switch (document.getElementById('algorithmSelect').value) {
+        case 'linear_regression':
+        case 'polynomial_regression':
+          predictions = model.predict(dataset.x);
+          drawChart(dataset.x, dataset.y, predictions);
+          break;
+
+        case 'kmeans':
+          predictions = model.predict(dataset.x);
+          drawKMeansChart(dataset.x, predictions);
+          break;
+
+        case 'knn':
+          predictions = model.predict(dataset.x);
+          document.getElementById('results').innerText = "Predicciones: " + JSON.stringify(predictions);
+          break;
+      }
+    }
+
+    // Función auxiliar para convertir CSV en datos
+    function parseCSV(data) {
+      const lines = data.trim().split("\n");
+      const headers = lines[0].split(",");
+      const inputCols = document.getElementById("inputVars").value.split(",");
+      const outputCol = document.getElementById("outputVar").value.trim();
+      const result = { x: [], y: [] };
+
+      lines.slice(1).forEach(line => {
+        const values = line.split(",");
+        const row = headers.reduce((obj, header, index) => {
+          const value = Number(values[index]);
+          if (!isNaN(value)) {
+            obj[header.trim()] = value;
+          }
+          return obj;
+        }, {});
+
+        // Solo agregar filas válidas
+        if (inputCols.every(col => !isNaN(row[col.trim()])) && !isNaN(row[outputCol])) {
+          result.x.push(inputCols.map(col => row[col.trim()]));
+          result.y.push(row[outputCol]);
+        }
+      });
+      return result;
+    }
+
+    // Función para graficar resultados de regresión
+    function drawChart(x, y, predictions) {
+      google.charts.load('current', { 'packages': ['corechart'] });
+      google.charts.setOnLoadCallback(() => {
+        const data = new google.visualization.DataTable();
+        data.addColumn('number', 'X');
+        data.addColumn('number', 'Y Original');
+        data.addColumn('number', 'Y Predicho');
+
+        x.forEach((xi, i) => {
+          if (!isNaN(xi) && !isNaN(y[i]) && !isNaN(predictions[i])) {
+            data.addRow([xi, y[i], predictions[i]]);
+          }
+        });
+
+        const options = { title: 'Predicciones vs. Valores Originales' };
+        const chart = new google.visualization.LineChart(document.getElementById('chart_div'));
+        chart.draw(data, options);
+      });
+    }
+
+    // Función para graficar resultados de K-Means
+    function drawKMeansChart(data, clusters) {
+      google.charts.load('current', { 'packages': ['corechart'] });
+      google.charts.setOnLoadCallback(() => {
+        const chartData = new google.visualization.DataTable();
+        chartData.addColumn('number', 'X');
+        chartData.addColumn('number', 'Cluster');
+
+        data.forEach((xi, i) => {
+          if (!isNaN(xi) && !isNaN(clusters[i])) {
+            chartData.addRow([xi, clusters[i]]);
+          }
+        });
+
+        const options = { title: 'Clusters de K-Means' };
+        const chart = new google.visualization.ScatterChart(document.getElementById('chart_div'));
+        chart.draw(chartData, options);
+      });
+    }
+  </script>
+</body>
+</html>

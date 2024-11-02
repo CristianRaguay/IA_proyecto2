@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script type="text/javascript" src="./dist/tytus.js"></script>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <title>Aplicación KMeans</title>
+</head>
+<body>
+    <h2>G14 - KMeans</h2>
+    
+    <div style="width: 100%;">
+        <input style="width: 60%;" id="cluster_count" type="number" placeholder="Ingrese la cantidad de clusters" value="3">
+        <br>
+        <input style="width: 60%;" id="iterations" type="number" placeholder="Ingrese la cantidad de iteraciones a realizar" value="3">
+        <br>
+        <input style="width: 60%;" id="csv_file" type="file" accept=".csv">
+        <br>
+        <button id="btnFile">Cargar CSV y Calcular KMeans</button>
+        <button id="btnLineal">Calcular KMeans Lineal</button>
+
+        <div id="chart_div" style="width: 900px; height: 500px;"></div>
+    </div>
+
+    <script>
+        document.getElementById('btnFile').onclick = function () {
+            const fileInput = document.getElementById('csv_file');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Por favor, seleccione un archivo CSV.');
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = function (event) {
+                const csv = event.target.result;
+                const records = parseCSV(csv);
+                
+                // Aseguramos que haya datos válidos para KMeans
+                if (records.length === 0) {
+                    alert('El archivo CSV no contiene datos válidos.');
+                    return;
+                }
+
+                // Obtén los valores numéricos de una columna específica
+                const data = records.map(record => parseFloat(record[Object.keys(record)[0]])); // Cambia el índice de columna según sea necesario
+                const k = parseInt(document.getElementById('cluster_count').value);
+                const iterations = parseInt(document.getElementById('iterations').value);
+
+                if (data.length < k) {
+                    alert(`El número de clusters (${k}) no puede ser menor a la cantidad de datos (${data.length})`);
+                    return;
+                }
+
+                const kmeans = new LinearKMeans(k, data);
+                const clusterized_data = kmeans.clusterize(k, data, iterations);
+                drawChart(clusterized_data);
+            };
+
+            reader.readAsText(file);
+        };
+
+        document.getElementById('btnLineal').onclick = function () {
+            const linear_data = prompt("Ingrese los números separados por comas (0,1,2,3,...)", "-99,-92,-89,-87,-83,-82,-78,-76,-70,-62,-57,-55,-50,-42,-35,-33,-32,-30,-27,-17,-12,-10,0,1,2,25,29,33,39,41,53,54,67");
+            const k = parseInt(document.getElementById('cluster_count').value);
+            const iterations = parseInt(document.getElementById('iterations').value);
+            const data = linear_data.split(',').map(d => parseInt(d.trim()));
+
+            if (data.length < k) {
+                alert(`El número de clusters (${k}) no puede ser menor a la cantidad de datos (${data.length})`);
+                return;
+            }
+
+            const kmeans = new LinearKMeans(k, data);
+            const clusterized_data = kmeans.clusterize(k, data, iterations);
+            drawChart(clusterized_data);
+        };
+
+        function drawChart(clusterized_data) {
+            let clusters = new Set(clusterized_data.map(a => a[1]));
+            clusters = Array.from(clusters).map(cluster => [cluster, "#000000".replace(/0/g, () => (~~(Math.random() * 16)).toString(16))]);
+
+            google.charts.load('current', { 'packages': ['corechart'] });
+            google.charts.setOnLoadCallback(() => {
+                const graph_data = new google.visualization.DataTable();
+                graph_data.addColumn('number', 'X');
+                graph_data.addColumn('number', 'Y');
+                graph_data.addColumn({ type: 'string', role: 'style' });
+
+                let a = clusterized_data.map(e => [e[0], 0, `point { size: 7; shape-type: diamond; fill-color: ${clusters.find(c => c[0] === e[1])[1]}}`]);
+                graph_data.addRows(a);
+
+                clusters.forEach(c => {
+                    graph_data.addRow([c[0], 0, `point { size: 3; shape-type: square; fill-color: #ff0000}`]);
+                });
+
+                const options = {
+                    title: 'Puntos KMeans',
+                    seriesType: 'scatter',
+                    series: { 1: { type: 'line' } },
+                    hAxis: { title: 'X', minValue: 0, maxValue: Math.max(...a.map(point => point[0])) + 10 },
+                    yAxis: { title: 'Y', minValue: 0, maxValue: 5 },
+                    legend: 'none'
+                };
+
+                const chart = new google.visualization.ScatterChart(document.getElementById('chart_div'));
+                chart.draw(graph_data, options);
+            });
+        }
+
+        function parseCSV(csv) {
+            const rows = csv.split('\n').map(row => row.split(','));
+            const headers = rows[0];
+            const records = rows.slice(1).map(row => {
+                if (row.length !== headers.length) {
+                    console.warn('Skipping row due to mismatched length:', row);
+                    return null;
+                }
+
+                return headers.reduce((obj, header, index) => {
+                    const value = row[index].trim();
+                    obj[header.trim()] = isNaN(value) ? value : parseFloat(value);
+                    return obj;
+                }, {});
+            }).filter(record => record !== null);
+
+            return records;
+        }
+    </script>
+</body>
+</html>
